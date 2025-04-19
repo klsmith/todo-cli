@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"todo/errs"
 )
 
 const todoHomeName = ".todo"
@@ -19,54 +20,41 @@ func main() {
 	defer fmt.Println("")
 	args := os.Args[1:]
 	usr, err := user.Current()
-	handleError("unable to get current user", err)
+	errs.MaybePanic("unable to get current user", err)
 	userHome := usr.HomeDir
 	appHome := filepath.Join(userHome, todoHomeName)
 	err = os.MkdirAll(appHome, os.ModePerm)
-	handleError("unable to access home directory at "+appHome, err)
+	errs.MaybePanic("unable to access home directory at "+appHome, err)
 	todoPath = filepath.Join(appHome, listFileName)
 	initListFile()
 	todo := readList()
 	err = todo.doCommand(args)
-	handleError(fmt.Sprintf("unable to execute %v", args), err)
-}
-
-func handleError(message string, err error) {
-	if err != nil {
-		panic(doError(message, err))
-	}
-}
-
-func doError(message string, subErr error) error {
-	if subErr != nil {
-		return fmt.Errorf("%s\n\t| %w", message, subErr)
-	}
-	return fmt.Errorf("%s\n", message)
+	errs.MaybePanic(fmt.Sprintf("unable to execute %v", args), err)
 }
 
 func initListFile() {
 	file, err := os.OpenFile(todoPath, os.O_CREATE, os.ModePerm.Perm())
-	handleError("unable to open list at "+todoPath, err)
+	errs.MaybePanic("unable to open list at "+todoPath, err)
 	defer func() {
 		err = file.Close()
-		handleError("unable to close list file at "+todoPath, err)
+		errs.MaybePanic("unable to close list file at "+todoPath, err)
 	}()
 	stat, err := file.Stat()
-	handleError("unable to stat list at "+todoPath, err)
+	errs.MaybePanic("unable to stat list at "+todoPath, err)
 	size := stat.Size()
 	if size == 0 {
 		emptyList := TodoList{LastID: -1, Items: make(TodoItemRefs)}
 		err = emptyList.save()
-		handleError("unable to generate default to-do list", err)
+		errs.MaybePanic("unable to generate default to-do list", err)
 	}
 }
 
 func readList() TodoList {
 	bytes, err := os.ReadFile(todoPath)
-	handleError("unable to read list at "+todoPath, err)
+	errs.MaybePanic("unable to read list at "+todoPath, err)
 	var list TodoList
 	err = json.Unmarshal(bytes, &list)
-	handleError("unable to unmarshal list at "+todoPath, err)
+	errs.MaybePanic("unable to unmarshal list at "+todoPath, err)
 	return list
 }
 
@@ -161,7 +149,7 @@ func (todo *TodoList) doAddCommand(args []string) error {
 func (todo *TodoList) doCompleteCommand(args []string) error {
 	item, err := todo.lookupItem(args[0])
 	if err != nil {
-		return doError("unable to complete item "+args[0], err)
+		return errs.Wrap("unable to complete item "+args[0], err)
 	}
 	item.Complete = true
 	todo.Items[item.ID] = *item
@@ -172,7 +160,7 @@ func (todo *TodoList) doCompleteCommand(args []string) error {
 func (todo *TodoList) doRemoveCommand(args []string) error {
 	item, err := todo.lookupItem(args[0])
 	if err != nil {
-		return doError("unable to remove item "+args[0], err)
+		return errs.Wrap("unable to remove item "+args[0], err)
 	}
 	todo.removeItem(*item)
 	return todo.save()
@@ -197,11 +185,11 @@ func (todo *TodoList) removeItem(item TodoItem) {
 func (todo *TodoList) lookupItem(argId string) (*TodoItem, error) {
 	lookupId, err := strconv.Atoi(argId)
 	if err != nil {
-		return nil, doError("unable to parse id "+argId, err)
+		return nil, errs.Wrap("unable to parse id "+argId, err)
 	}
 	item, ok := todo.Items[lookupId]
 	if !ok {
-		return nil, doError("unable to find item "+argId, nil)
+		return nil, errs.Wrap("unable to find item "+argId, nil)
 	}
 	return &item, nil
 }
@@ -236,11 +224,11 @@ func (todo *TodoList) doCleanupCommand() error {
 func (todo *TodoList) save() error {
 	bytes, err := json.Marshal(todo)
 	if err != nil {
-		return doError("unable save changes", err)
+		return errs.Wrap("unable save changes", err)
 	}
 	err = os.WriteFile(todoPath, bytes, os.ModePerm.Perm())
 	if err != nil {
-		return doError("unable save changes "+todoPath, err)
+		return errs.Wrap("unable save changes "+todoPath, err)
 	}
 	return nil
 }
