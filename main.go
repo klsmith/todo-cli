@@ -53,8 +53,8 @@ func doCommand(mainArgs []string, repo todo.Repository) error {
 		err = doUnCompleteCommand(commandArgs, repo)
 	case "remove":
 		err = doRemoveCommand(commandArgs, repo)
-	case "removeall":
-		err = doRemoveAllCommand(repo)
+	case "purge":
+		err = doPurgeCommand(repo)
 	case "cleanup":
 		err = doCleanupCommand(repo)
 	}
@@ -136,7 +136,7 @@ func doRemoveCommand(args []string, repo todo.Repository) error {
 	return nil
 }
 
-func doRemoveAllCommand(repo todo.Repository) error {
+func doPurgeCommand(repo todo.Repository) error {
 	size := repo.Count()
 	if size == 0 {
 		fmt.Println("Your to-do list is empty!")
