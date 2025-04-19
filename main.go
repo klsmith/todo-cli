@@ -1,14 +1,12 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/user"
 	"path/filepath"
-	"sort"
-	"strconv"
 	"todo/errs"
+	"todo/todo"
 )
 
 const todoHomeName = ".todo"
@@ -26,52 +24,12 @@ func main() {
 	err = os.MkdirAll(appHome, os.ModePerm)
 	errs.MaybePanic("unable to access home directory at "+appHome, err)
 	todoPath = filepath.Join(appHome, listFileName)
-	initListFile()
-	todo := readList()
-	err = todo.doCommand(args)
+	repo := todo.NewJsonRepository(todoPath)
+	err = doCommand(args, repo)
 	errs.MaybePanic(fmt.Sprintf("unable to execute %v", args), err)
 }
 
-func initListFile() {
-	file, err := os.OpenFile(todoPath, os.O_CREATE, os.ModePerm.Perm())
-	errs.MaybePanic("unable to open list at "+todoPath, err)
-	defer func() {
-		err = file.Close()
-		errs.MaybePanic("unable to close list file at "+todoPath, err)
-	}()
-	stat, err := file.Stat()
-	errs.MaybePanic("unable to stat list at "+todoPath, err)
-	size := stat.Size()
-	if size == 0 {
-		emptyList := TodoList{LastID: -1, Items: make(TodoItemRefs)}
-		err = emptyList.save()
-		errs.MaybePanic("unable to generate default to-do list", err)
-	}
-}
-
-func readList() TodoList {
-	bytes, err := os.ReadFile(todoPath)
-	errs.MaybePanic("unable to read list at "+todoPath, err)
-	var list TodoList
-	err = json.Unmarshal(bytes, &list)
-	errs.MaybePanic("unable to unmarshal list at "+todoPath, err)
-	return list
-}
-
-type TodoList struct {
-	LastID int          `json:"last_id"`
-	Items  TodoItemRefs `json:"items"`
-}
-
-type TodoItemRefs = map[int]TodoItem
-
-type TodoItem struct {
-	ID          int    `json:"id"`
-	Complete    bool   `json:"complete"`
-	Description string `json:"description"`
-}
-
-func (todo *TodoList) doCommand(mainArgs []string) error {
+func doCommand(mainArgs []string, repo todo.Repository) error {
 	var command string
 	var commandArgs []string
 	if len(mainArgs) == 0 {
@@ -86,17 +44,19 @@ func (todo *TodoList) doCommand(mainArgs []string) error {
 	case "help":
 		doHelpCommand()
 	case "list":
-		todo.doListCommand()
+		doListCommand(repo)
 	case "add":
-		err = todo.doAddCommand(commandArgs)
+		err = doAddCommand(commandArgs, repo)
 	case "complete":
-		err = todo.doCompleteCommand(commandArgs)
+		err = doCompleteCommand(commandArgs, repo)
+	case "uncomplete":
+		err = doUnCompleteCommand(commandArgs, repo)
 	case "remove":
-		err = todo.doRemoveCommand(commandArgs)
+		err = doRemoveCommand(commandArgs, repo)
 	case "removeall":
-		err = todo.doRemoveAllCommand()
+		err = doRemoveAllCommand(repo)
 	case "cleanup":
-		err = todo.doCleanupCommand()
+		err = doCleanupCommand(repo)
 	}
 	if err != nil {
 		return err
@@ -116,133 +76,89 @@ func doHelpCommand() {
 	fmt.Println("\t remove all \t\t Removes all items from the list.")
 }
 
-func (todo *TodoList) doListCommand() {
-	size := todo.size()
+func doListCommand(repo todo.Repository) {
+	size := repo.Count()
 	if size == 0 {
 		fmt.Println("Your to-do list is empty!")
 	}
-	keys := make([]int, 0, len(todo.Items))
-	for k := range todo.Items {
-		keys = append(keys, k)
-	}
-	sort.Ints(keys)
-	for _, k := range keys {
-		item := todo.Items[k]
-		fmt.Println(item.string())
+	items := repo.All()
+	for _, item := range items {
+		fmt.Println(item.DisplayString())
 	}
 }
 
-func (todo *TodoList) doAddCommand(args []string) error {
+func doAddCommand(args []string, repo todo.Repository) error {
 	newDescription := args[0]
-	newId := todo.LastID + 1
-	todo.LastID = newId
-	newItem := TodoItem{
-		ID:          newId,
-		Description: newDescription,
-		Complete:    false,
-	}
-	todo.Items[newId] = newItem
-	fmt.Printf("Added → %s\n", newItem.string())
-	return todo.save()
-}
-
-func (todo *TodoList) doCompleteCommand(args []string) error {
-	item, err := todo.lookupItem(args[0])
+	item, err := repo.Create(newDescription)
 	if err != nil {
-		return errs.Wrap("unable to complete item "+args[0], err)
+		return err
 	}
-	item.Complete = true
-	todo.Items[item.ID] = *item
-	fmt.Printf("Completed → %s\n", item.string())
-	return todo.save()
-}
-
-func (todo *TodoList) doRemoveCommand(args []string) error {
-	item, err := todo.lookupItem(args[0])
-	if err != nil {
-		return errs.Wrap("unable to remove item "+args[0], err)
-	}
-	todo.removeItem(*item)
-	return todo.save()
-}
-
-func (todo *TodoList) doRemoveAllCommand() error {
-	size := todo.size()
-	if size == 0 {
-		fmt.Println("Your to-do list is empty!")
-		return nil
-	}
-	todo.Items = make(TodoItemRefs)
-	fmt.Println("Removed all items from to-do list!")
-	return todo.save()
-}
-
-func (todo *TodoList) removeItem(item TodoItem) {
-	delete(todo.Items, item.ID)
-	fmt.Printf("Removed → %s\n", item.string())
-}
-
-func (todo *TodoList) lookupItem(argId string) (*TodoItem, error) {
-	lookupId, err := strconv.Atoi(argId)
-	if err != nil {
-		return nil, errs.Wrap("unable to parse id "+argId, err)
-	}
-	item, ok := todo.Items[lookupId]
-	if !ok {
-		return nil, errs.Wrap("unable to find item "+argId, nil)
-	}
-	return &item, nil
-}
-
-func (todo *TodoList) doCleanupCommand() error {
-	size := todo.size()
-	if size == 0 {
-		fmt.Println("Your to-do list is empty!")
-		return nil
-	}
-	fmt.Println("Removing all completed items...")
-	for _, item := range todo.Items {
-		if item.Complete {
-			todo.removeItem(item)
-		}
-	}
-	fmt.Println("Re-indexing list...")
-	newSize := todo.size()
-	newItems := make(TodoItemRefs, newSize)
-	var index = 0
-	for _, item := range todo.Items {
-		item.ID = index
-		newItems[index] = item
-		index++
-	}
-	todo.LastID = newSize
-	todo.Items = newItems
-	fmt.Println("Cleanup complete!")
-	return todo.save()
-}
-
-func (todo *TodoList) save() error {
-	bytes, err := json.Marshal(todo)
-	if err != nil {
-		return errs.Wrap("unable save changes", err)
-	}
-	err = os.WriteFile(todoPath, bytes, os.ModePerm.Perm())
-	if err != nil {
-		return errs.Wrap("unable save changes "+todoPath, err)
-	}
+	fmt.Printf("Added → %s\n", item.DisplayString())
 	return nil
 }
 
-func (todo *TodoList) size() int {
-	return len(todo.Items)
+func doCompleteCommand(args []string, repo todo.Repository) error {
+	id, err := todo.IDFromString(args[0])
+	if err != nil {
+		return errs.Wrap("unable to complete item", err)
+	}
+	item, err := repo.Complete(id)
+	if err != nil {
+		return errs.Wrap("unable to complete item "+id.DisplayString(), err)
+	}
+	fmt.Printf("Completed → %s\n", item.DisplayString())
+	return nil
 }
 
-func (item *TodoItem) string() string {
-	var complete string
-	if item.Complete {
-		complete = "✅"
-	} else {
-		complete = "❌"
+func doUnCompleteCommand(args []string, repo todo.Repository) error {
+	id, err := todo.IDFromString(args[0])
+	if err != nil {
+		return errs.Wrap("unable to un-complete item", err)
 	}
-	return fmt.Sprintf("%3d: %-2s %s", item.ID, complete, item.Description)
+	item, err := repo.UnComplete(id)
+	if err != nil {
+		return errs.Wrap("unable to un-complete item "+id.DisplayString(), err)
+	}
+	fmt.Printf("Un-Completed → %s\n", item.DisplayString())
+	return nil
+}
+
+func doRemoveCommand(args []string, repo todo.Repository) error {
+	id, err := todo.IDFromString(args[0])
+	if err != nil {
+		return errs.Wrap("unable to remove item", err)
+	}
+	item, err := repo.Delete(id)
+	if err != nil {
+		return errs.Wrap("unable to remove item "+id.DisplayString(), err)
+	}
+	fmt.Printf("Removed → %s\n", item.DisplayString())
+	return nil
+}
+
+func doRemoveAllCommand(repo todo.Repository) error {
+	size := repo.Count()
+	if size == 0 {
+		fmt.Println("Your to-do list is empty!")
+	}
+	err := repo.DeleteAll()
+	if err != nil {
+		return errs.Wrap("unable to remove all items", err)
+	}
+	fmt.Println("Removed all items from to-do list!")
+	return nil
+}
+
+func doCleanupCommand(repo todo.Repository) error {
+	size := repo.Count()
+	if size == 0 {
+		fmt.Println("Your to-do list is empty!")
+	}
+	fmt.Println("Removing all completed items...")
+	err := repo.CleanCompleted()
+	if err != nil {
+		return errs.Wrap("unable to remove all completed items", err)
+	}
+	fmt.Println("Cleanup complete!")
+	return nil
 }
