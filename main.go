@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/pterm/pterm"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -47,6 +48,8 @@ func doCommand(mainArgs []string, repo todo.Repository) error {
 		doListCommand(repo)
 	case "add":
 		err = doAddCommand(commandArgs, repo)
+	case "edit":
+		err = doEditCommand(commandArgs, repo)
 	case "complete":
 		err = doCompleteCommand(commandArgs, repo)
 	case "uncomplete":
@@ -70,6 +73,7 @@ func doHelpCommand() {
 	fmt.Println("\t help \t\t\t You're lookin' at it!")
 	fmt.Println("\t list \t\t\t Prints the current state of the list.")
 	fmt.Println("\t add \"<description>\" \t Adds a new item to the list.")
+	fmt.Println("\t edit <id> \t\t Opens the item description for editing.")
 	fmt.Println("\t complete <id> \t\t Marks an item as complete.")
 	fmt.Println("\t cleanup <id> \t\t Removes all completed items from the list and re-indexes the items.")
 	fmt.Println("\t remove <id> \t\t Removes an item from the list.")
@@ -94,6 +98,32 @@ func doAddCommand(args []string, repo todo.Repository) error {
 		return err
 	}
 	fmt.Printf("Added → %s\n", item.DisplayString())
+	return nil
+}
+
+func doEditCommand(args []string, repo todo.Repository) error {
+	id, err := todo.IDFromString(args[0])
+	if err != nil {
+		return errs.Wrap("unable to edit item "+id.DisplayString(), err)
+	}
+	item, found := repo.Find(id)
+	if !found {
+		return errs.New("unable to edit item " + id.DisplayString())
+	}
+	newDescription, err := pterm.InteractiveTextInputPrinter{
+		DefaultText:  "Edit Description",
+		Delimiter:    ": ",
+		TextStyle:    &pterm.ThemeDefault.DefaultText,
+		DefaultValue: item.Description,
+	}.Show()
+	if err != nil {
+		return errs.Wrap("error while editing item "+id.DisplayString(), err)
+	}
+	updatedItem, err := repo.Update(id, newDescription)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Updated → %s\n", updatedItem.DisplayString())
 	return nil
 }
 

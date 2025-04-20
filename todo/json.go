@@ -108,12 +108,13 @@ func (r *JsonRepository) All() []Item {
 }
 
 func (r *JsonRepository) Find(id ID) (Item, bool) {
-	itemJson, ok := r.list.Items[id]
-	if !ok {
-		return Item{}, false
-	}
-	item := jsonToItem(itemJson)
-	return item, true
+	itemJson, found := r.findJson(id)
+	return jsonToItem(itemJson), found
+}
+
+func (r *JsonRepository) findJson(id ID) (ItemJson, bool) {
+	itemJson, found := r.list.Items[id]
+	return itemJson, found
 }
 
 func (r *JsonRepository) Create(description string) (Item, error) {
@@ -132,7 +133,19 @@ func (r *JsonRepository) Create(description string) (Item, error) {
 	return item, nil
 }
 
-func (r *JsonRepository) Update(id ID, description string) {}
+func (r *JsonRepository) Update(id ID, description string) (Item, error) {
+	itemJson, found := r.findJson(id)
+	if !found {
+		return Item{}, errs.New("unable to update item " + id.DisplayString())
+	}
+	itemJson.Description = description
+	r.list.Items[id] = itemJson
+	err := r.save()
+	if err != nil {
+		return Item{}, errs.Wrap("unable to update item "+id.DisplayString(), err)
+	}
+	return jsonToItem(itemJson), nil
+}
 
 func (r *JsonRepository) Complete(id ID) (Item, error) {
 	item, found := r.Find(id)

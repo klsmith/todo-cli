@@ -5,7 +5,7 @@ type Repository interface {
 	Count() int
 	Find(id ID) (Item, bool)
 	Create(description string) (Item, error)
-	Update(id ID, description string)
+	Update(id ID, description string) (Item, error)
 	Complete(id ID) (Item, error)
 	UnComplete(id ID) (Item, error)
 	Delete(id ID) (Item, error)
