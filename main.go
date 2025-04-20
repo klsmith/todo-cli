@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/pterm/pterm"
+	"github.com/urfave/cli/v3"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -26,59 +28,110 @@ func main() {
 	errs.MaybePanic("unable to access home directory at "+appHome, err)
 	todoPath = filepath.Join(appHome, listFileName)
 	repo := todo.NewJsonRepository(todoPath)
-	err = doCommand(args, repo)
+	cmd := buildCmd(repo)
+	err = cmd.Run(context.Background(), os.Args)
+	errs.MaybePanic(fmt.Sprintf("unable to execute %v", args), err)
+	//err = doCommand(args, repo)
 	errs.MaybePanic(fmt.Sprintf("unable to execute %v", args), err)
 }
 
-func doCommand(mainArgs []string, repo todo.Repository) error {
-	var command string
-	var commandArgs []string
-	if len(mainArgs) == 0 {
-		command = "list"
-		commandArgs = make([]string, 0)
-	} else {
-		command = mainArgs[0]
-		commandArgs = mainArgs[1:]
+func buildCmd(repo todo.Repository) *cli.Command {
+	return &cli.Command{
+		Name:  "todo",
+		Usage: "maintain a to-do checklist from your terminal",
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			doListCommand(repo)
+			return nil
+		},
+		Commands: []*cli.Command{
+			{Usage: "calling without arguments defaults to the list command"},
+			{
+				Name:    "list",
+				Aliases: []string{"l"},
+				Usage:   "print the current state of the list",
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					doListCommand(repo)
+					return nil
+				},
+			},
+			{
+				Name:      "add",
+				Aliases:   []string{"a"},
+				Usage:     "add a new item to the list",
+				ArgsUsage: "<description>",
+				Arguments: []cli.Argument{
+					&cli.StringArg{Name: "description"},
+				},
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					return doAddCommand(cmd, repo)
+				},
+			},
+			{
+				Name:      "edit",
+				Aliases:   []string{"e"},
+				Usage:     "open the item description for editing",
+				ArgsUsage: "<id>",
+				Arguments: []cli.Argument{
+					&cli.IntArg{Name: "id"},
+				},
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					return doEditCommand(cmd, repo)
+				},
+			},
+			{
+				Name:      "complete",
+				Aliases:   []string{"c"},
+				Usage:     "mark an item as complete",
+				ArgsUsage: "<id>",
+				Arguments: []cli.Argument{
+					&cli.IntArg{Name: "id"},
+				},
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					return doCompleteCommand(cmd, repo)
+				},
+			},
+			{
+				Name:      "incomplete",
+				Aliases:   []string{"i"},
+				Usage:     "mark an item as incomplete",
+				ArgsUsage: "<id>",
+				Arguments: []cli.Argument{
+					&cli.IntArg{Name: "id"},
+				},
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					return doIncompleteCommand(cmd, repo)
+				},
+			},
+			{
+				Name:      "remove",
+				Aliases:   []string{"r"},
+				Usage:     "remove an item from the list",
+				ArgsUsage: "<id>",
+				Arguments: []cli.Argument{
+					&cli.IntArg{Name: "id"},
+				},
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					return doRemoveCommand(cmd, repo)
+				},
+			},
+			{
+				Name:    "purge",
+				Aliases: []string{"p"},
+				Usage:   "remove all items from the list",
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					return doPurgeCommand(repo)
+				},
+			},
+			{
+				Name:    "cleanup",
+				Aliases: []string{"cu"},
+				Usage:   "remove all completed items from the list",
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					return doCleanupCommand(repo)
+				},
+			},
+		},
 	}
-	var err error
-	switch command {
-	case "help":
-		doHelpCommand()
-	case "list":
-		doListCommand(repo)
-	case "add":
-		err = doAddCommand(commandArgs, repo)
-	case "edit":
-		err = doEditCommand(commandArgs, repo)
-	case "complete":
-		err = doCompleteCommand(commandArgs, repo)
-	case "incomplete":
-		err = doIncompleteCommand(commandArgs, repo)
-	case "remove":
-		err = doRemoveCommand(commandArgs, repo)
-	case "purge":
-		err = doPurgeCommand(repo)
-	case "cleanup":
-		err = doCleanupCommand(repo)
-	}
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func doHelpCommand() {
-	fmt.Println("To-Do List CLI")
-	fmt.Println("Usage:")
-	fmt.Println("\t help \t\t\t You're lookin' at it!")
-	fmt.Println("\t list \t\t\t Prints the current state of the list.")
-	fmt.Println("\t add \"<description>\" \t Adds a new item to the list.")
-	fmt.Println("\t edit <id> \t\t Opens the item description for editing.")
-	fmt.Println("\t complete <id> \t\t Marks an item as complete.")
-	fmt.Println("\t incomplete <id> \t\t Marks an item as incomplete.")
-	fmt.Println("\t cleanup <id> \t\t Removes all completed items from the list and re-indexes the items.")
-	fmt.Println("\t remove <id> \t\t Removes an item from the list.")
-	fmt.Println("\t remove all \t\t Removes all items from the list.")
 }
 
 func doListCommand(repo todo.Repository) {
@@ -92,8 +145,8 @@ func doListCommand(repo todo.Repository) {
 	}
 }
 
-func doAddCommand(args []string, repo todo.Repository) error {
-	newDescription := args[0]
+func doAddCommand(cmd *cli.Command, repo todo.Repository) error {
+	newDescription := cmd.Args().First()
 	item, err := repo.Create(newDescription)
 	if err != nil {
 		return err
@@ -102,10 +155,11 @@ func doAddCommand(args []string, repo todo.Repository) error {
 	return nil
 }
 
-func doEditCommand(args []string, repo todo.Repository) error {
-	id, err := todo.IDFromString(args[0])
+func doEditCommand(cmd *cli.Command, repo todo.Repository) error {
+	idToParse := cmd.Args().First()
+	id, err := todo.IDFromString(idToParse)
 	if err != nil {
-		return errs.Wrap("unable to edit item "+id.DisplayString(), err)
+		return errs.Wrap("unable to edit item "+idToParse, err)
 	}
 	item, found := repo.Find(id)
 	if !found {
@@ -128,8 +182,8 @@ func doEditCommand(args []string, repo todo.Repository) error {
 	return nil
 }
 
-func doCompleteCommand(args []string, repo todo.Repository) error {
-	id, err := todo.IDFromString(args[0])
+func doCompleteCommand(cmd *cli.Command, repo todo.Repository) error {
+	id, err := todo.IDFromString(cmd.Args().First())
 	if err != nil {
 		return errs.Wrap("unable to complete item", err)
 	}
@@ -141,8 +195,8 @@ func doCompleteCommand(args []string, repo todo.Repository) error {
 	return nil
 }
 
-func doIncompleteCommand(args []string, repo todo.Repository) error {
-	id, err := todo.IDFromString(args[0])
+func doIncompleteCommand(cmd *cli.Command, repo todo.Repository) error {
+	id, err := todo.IDFromString(cmd.Args().First())
 	if err != nil {
 		return errs.Wrap("unable to incomplete item", err)
 	}
@@ -154,8 +208,8 @@ func doIncompleteCommand(args []string, repo todo.Repository) error {
 	return nil
 }
 
-func doRemoveCommand(args []string, repo todo.Repository) error {
-	id, err := todo.IDFromString(args[0])
+func doRemoveCommand(cmd *cli.Command, repo todo.Repository) error {
+	id, err := todo.IDFromString(cmd.Args().First())
 	if err != nil {
 		return errs.Wrap("unable to remove item", err)
 	}
