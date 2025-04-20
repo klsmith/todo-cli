@@ -52,8 +52,8 @@ func doCommand(mainArgs []string, repo todo.Repository) error {
 		err = doEditCommand(commandArgs, repo)
 	case "complete":
 		err = doCompleteCommand(commandArgs, repo)
-	case "uncomplete":
-		err = doUnCompleteCommand(commandArgs, repo)
+	case "incomplete":
+		err = doIncompleteCommand(commandArgs, repo)
 	case "remove":
 		err = doRemoveCommand(commandArgs, repo)
 	case "purge":
@@ -75,6 +75,7 @@ func doHelpCommand() {
 	fmt.Println("\t add \"<description>\" \t Adds a new item to the list.")
 	fmt.Println("\t edit <id> \t\t Opens the item description for editing.")
 	fmt.Println("\t complete <id> \t\t Marks an item as complete.")
+	fmt.Println("\t incomplete <id> \t\t Marks an item as incomplete.")
 	fmt.Println("\t cleanup <id> \t\t Removes all completed items from the list and re-indexes the items.")
 	fmt.Println("\t remove <id> \t\t Removes an item from the list.")
 	fmt.Println("\t remove all \t\t Removes all items from the list.")
@@ -140,16 +141,16 @@ func doCompleteCommand(args []string, repo todo.Repository) error {
 	return nil
 }
 
-func doUnCompleteCommand(args []string, repo todo.Repository) error {
+func doIncompleteCommand(args []string, repo todo.Repository) error {
 	id, err := todo.IDFromString(args[0])
 	if err != nil {
-		return errs.Wrap("unable to un-complete item", err)
+		return errs.Wrap("unable to incomplete item", err)
 	}
-	item, err := repo.UnComplete(id)
+	item, err := repo.Incomplete(id)
 	if err != nil {
-		return errs.Wrap("unable to un-complete item "+id.DisplayString(), err)
+		return errs.Wrap("unable to incomplete item "+id.DisplayString(), err)
 	}
-	fmt.Printf("Un-Completed → %s\n", item.DisplayString())
+	fmt.Printf("Incompleted → %s\n", item.DisplayString())
 	return nil
 }
 

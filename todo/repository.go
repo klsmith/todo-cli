@@ -7,7 +7,7 @@ type Repository interface {
 	Create(description string) (Item, error)
 	Update(id ID, description string) (Item, error)
 	Complete(id ID) (Item, error)
-	UnComplete(id ID) (Item, error)
+	Incomplete(id ID) (Item, error)
 	Delete(id ID) (Item, error)
 	DeleteAll() error
 	CleanCompleted() error

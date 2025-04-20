@@ -161,7 +161,7 @@ func (r *JsonRepository) Complete(id ID) (Item, error) {
 	return item, nil
 }
 
-func (r *JsonRepository) UnComplete(id ID) (Item, error) {
+func (r *JsonRepository) Incomplete(id ID) (Item, error) {
 	item, found := r.Find(id)
 	if !found {
 		return Item{}, errs.New("unable to un-complete item " + id.DisplayString())
