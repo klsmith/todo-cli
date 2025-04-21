@@ -146,8 +146,8 @@ func doListCommand(repo todo.Repository) {
 }
 
 func doAddCommand(cmd *cli.Command, repo todo.Repository) error {
-	newDescription := cmd.Args().First()
-	item, err := repo.Create(newDescription)
+	description := cmd.StringArg("description")
+	item, err := repo.Create(description)
 	if err != nil {
 		return err
 	}
@@ -156,11 +156,7 @@ func doAddCommand(cmd *cli.Command, repo todo.Repository) error {
 }
 
 func doEditCommand(cmd *cli.Command, repo todo.Repository) error {
-	idToParse := cmd.Args().First()
-	id, err := todo.IDFromString(idToParse)
-	if err != nil {
-		return errs.Wrap("unable to edit item "+idToParse, err)
-	}
+	id := todo.ID(cmd.IntArg("id"))
 	item, found := repo.Find(id)
 	if !found {
 		return errs.New("unable to edit item " + id.DisplayString())
@@ -183,10 +179,7 @@ func doEditCommand(cmd *cli.Command, repo todo.Repository) error {
 }
 
 func doCompleteCommand(cmd *cli.Command, repo todo.Repository) error {
-	id, err := todo.IDFromString(cmd.Args().First())
-	if err != nil {
-		return errs.Wrap("unable to complete item", err)
-	}
+	id := todo.ID(cmd.IntArg("id"))
 	item, err := repo.Complete(id)
 	if err != nil {
 		return errs.Wrap("unable to complete item "+id.DisplayString(), err)
@@ -196,10 +189,7 @@ func doCompleteCommand(cmd *cli.Command, repo todo.Repository) error {
 }
 
 func doIncompleteCommand(cmd *cli.Command, repo todo.Repository) error {
-	id, err := todo.IDFromString(cmd.Args().First())
-	if err != nil {
-		return errs.Wrap("unable to incomplete item", err)
-	}
+	id := todo.ID(cmd.IntArg("id"))
 	item, err := repo.Incomplete(id)
 	if err != nil {
 		return errs.Wrap("unable to incomplete item "+id.DisplayString(), err)
@@ -209,10 +199,7 @@ func doIncompleteCommand(cmd *cli.Command, repo todo.Repository) error {
 }
 
 func doRemoveCommand(cmd *cli.Command, repo todo.Repository) error {
-	id, err := todo.IDFromString(cmd.Args().First())
-	if err != nil {
-		return errs.Wrap("unable to remove item", err)
-	}
+	id := todo.ID(cmd.IntArg("id"))
 	item, err := repo.Delete(id)
 	if err != nil {
 		return errs.Wrap("unable to remove item "+id.DisplayString(), err)
