@@ -138,10 +138,22 @@ func doListCommand(repo todo.Repository) {
 	size := repo.Count()
 	if size == 0 {
 		fmt.Println("Your to-do list is empty!")
+		return
 	}
 	items := repo.All()
+	completed := make([]todo.Item, 0)
 	for _, item := range items {
-		fmt.Println(item.DisplayString())
+		if item.Complete {
+			completed = append(completed, item)
+		} else {
+			fmt.Println(item.DisplayString())
+		}
+	}
+	if len(completed) > 0 {
+		fmt.Println("\nComplete:")
+		for _, item := range completed {
+			fmt.Println(item.DisplayString())
+		}
 	}
 }
 
