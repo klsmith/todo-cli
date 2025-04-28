@@ -90,6 +90,19 @@ func (r *JsonRepository) save() error {
 	return nil
 }
 
+func (r *JsonRepository) reindex() {
+	newSize := r.Count()
+	newItems := make(ItemJsonMap, newSize)
+	var index = 0
+	for _, item := range r.list.Items {
+		item.ID = ID(index)
+		newItems[item.ID] = item
+		index++
+	}
+	r.list.LastID = ID(newSize - 1)
+	r.list.Items = newItems
+}
+
 func (r *JsonRepository) Count() int {
 	return len(r.list.Items)
 }
@@ -190,6 +203,7 @@ func (r *JsonRepository) Delete(id ID) (Item, error) {
 
 func (r *JsonRepository) DeleteAll() error {
 	r.list.Items = make(ItemJsonMap)
+	r.reindex()
 	err := r.save()
 	if err != nil {
 		return errs.Wrap("unable to delete all items", err)
@@ -203,6 +217,7 @@ func (r *JsonRepository) CleanCompleted() error {
 			delete(r.list.Items, item.ID)
 		}
 	}
+	r.reindex()
 	err := r.save()
 	if err != nil {
 		return errs.Wrap("unable to clean complete items", err)
